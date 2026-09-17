@@ -8,12 +8,104 @@ from openpyxl.utils import get_column_letter
 from PIL import Image
 import streamlit as st
 
+# Page Configuration
 st.set_page_config(
-    page_title="Regal QC Generator", page_icon="📋", layout="centered"
+    page_title="Regal QC Manager",
+    page_icon="📋",
+    layout="centered",
+    initial_sidebar_state="collapsed",
+)
+
+# --- CUSTOM CSS UI STYLING ---
+st.markdown(
+    """
+    <style>
+    /* Global Container Styling */
+    .main .block-container {
+        padding-top: 2rem;
+        padding-bottom: 3rem;
+        max-width: 800px;
+    }
+    
+    /* Header Bar */
+    .app-header {
+        background: linear-gradient(135deg, #1F497D 0%, #112948 100%);
+        padding: 1.5rem;
+        border-radius: 12px;
+        color: white;
+        text-align: center;
+        margin-bottom: 1.5rem;
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+    }
+    .app-header h1 {
+        margin: 0;
+        font-size: 1.8rem;
+        font-weight: 700;
+        color: #ffffff;
+    }
+    .app-header p {
+        margin: 0.3rem 0 0 0;
+        font-size: 0.95rem;
+        opacity: 0.85;
+    }
+
+    /* Metric Cards */
+    .metric-card {
+        background-color: #ffffff;
+        border: 1px solid #E2E8F0;
+        border-radius: 10px;
+        padding: 1rem;
+        text-align: center;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.02);
+    }
+    .metric-value {
+        font-size: 1.6rem;
+        font-weight: 700;
+        color: #1F497D;
+    }
+    .metric-label {
+        font-size: 0.8rem;
+        color: #64748B;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+    }
+
+    /* Status Badges */
+    .badge-resolved {
+        background-color: #DEF7EC;
+        color: #03543F;
+        padding: 4px 10px;
+        border-radius: 12px;
+        font-size: 0.8rem;
+        font-weight: 600;
+        display: inline-block;
+    }
+    .badge-open {
+        background-color: #FDE8E8;
+        color: #9B1C1C;
+        padding: 4px 10px;
+        border-radius: 12px;
+        font-size: 0.8rem;
+        font-weight: 600;
+        display: inline-block;
+    }
+
+    /* Tabs Styling */
+    .stTabs [data-baseweb="tab-list"] {
+        gap: 8px;
+    }
+    .stTabs [data-baseweb="tab"] {
+        height: 45px;
+        border-radius: 8px;
+        font-weight: 600;
+    }
+    </style>
+""",
+    unsafe_allow_html=True,
 )
 
 
-# --- DATABASE SETUP (PERSISTENT LOGS) ---
+# --- DATABASE SETUP ---
 def init_db():
     conn = sqlite3.connect("qc_logs.db")
     cursor = conn.cursor()
@@ -88,15 +180,25 @@ def delete_entry(entry_id):
     conn.close()
 
 
-# --- INTERFACE TABS ---
-st.title("📋 Regal QC Manager")
-tab1, tab2, tab3 = st.tabs(
-    ["➕ New Incident", "📜 Log History", "📊 Export Monthly Report"]
+# --- APP HEADER ---
+st.markdown(
+    """
+    <div class="app-header">
+        <h1>📋 Regal Quality Control</h1>
+        <p>Mobile Inspection & Report Management</p>
+    </div>
+""",
+    unsafe_allow_html=True,
 )
 
-# --- TAB 1: ENTRY FORM ---
+# Navigation Tabs
+tab1, tab2, tab3 = st.tabs(
+    ["➕ New Case", "📜 History Logs", "📊 Generate Report"]
+)
+
+# --- TAB 1: NEW INCIDENT ---
 with tab1:
-    st.markdown("### Log New QC Incident")
+    st.caption("Fill in the form below to record a new Quality Control case.")
     with st.form("qc_entry_form", clear_on_submit=True):
         col1, col2 = st.columns(2)
         with col1:
@@ -111,48 +213,66 @@ with tab1:
             supplier = st.text_input(
                 "Supplier / Location", placeholder="e.g. Accentronix CC"
             )
-            resolved = st.selectbox("Resolved?", ["Y", "N"])
+            resolved = st.selectbox("Status", ["Y", "N"], format_func=lambda x: "Resolved (Y)" if x == "Y" else "Open (N)")
             date_completed = st.date_input(
                 "Date Completed", value=datetime.today()
             )
 
-        product_desc = st.text_area("Product Description")
-        issue_desc = st.text_area("Background / Issue Description")
-        corrective_action = st.text_area("Corrective Action / Outcome")
+        st.divider()
+        product_desc = st.text_area("Product Description", placeholder="Enter item details...")
+        issue_desc = st.text_area("Issue Description", placeholder="Describe the defect or query...")
+        corrective_action = st.text_area("Corrective Action", placeholder="Action taken to resolve...")
 
-        st.markdown("#### 📷 Product Photo")
-        camera_photo = st.camera_input("Take a photo of the product/defect")
+        st.divider()
+        st.markdown("📷 **Product Photo**")
+        camera_photo = st.camera_input("Capture product image")
 
-        submitted = st.form_submit_button("Save to Log Database")
+        submitted = st.form_submit_button("💾 Save Case Entry", use_container_width=True, type="primary")
 
         if submitted:
-            photo_bytes = camera_photo.getvalue() if camera_photo else None
-            entry = {
-                "date_opened": date_opened.strftime("%Y-%m-%d"),
-                "product_code": product_code,
-                "quantity": quantity,
-                "time_taken": time_taken,
-                "supplier": supplier,
-                "resolved": resolved,
-                "date_completed": date_completed.strftime("%Y-%m-%d")
-                if resolved == "Y"
-                else "",
-                "product_desc": product_desc,
-                "issue_desc": issue_desc,
-                "corrective_action": corrective_action,
-                "photo_data": photo_bytes,
-            }
-            add_qc_entry(entry)
-            st.success("Entry permanently saved to history database!")
+            if not product_code:
+                st.error("Please enter a Product Code.")
+            else:
+                photo_bytes = camera_photo.getvalue() if camera_photo else None
+                entry = {
+                    "date_opened": date_opened.strftime("%Y-%m-%d"),
+                    "product_code": product_code,
+                    "quantity": quantity,
+                    "time_taken": time_taken,
+                    "supplier": supplier,
+                    "resolved": resolved,
+                    "date_completed": date_completed.strftime("%Y-%m-%d") if resolved == "Y" else "",
+                    "product_desc": product_desc,
+                    "issue_desc": issue_desc,
+                    "corrective_action": corrective_action,
+                    "photo_data": photo_bytes,
+                }
+                add_qc_entry(entry)
+                st.toast("Case saved to database!", icon="✅")
+                st.success(f"Case logged for product {product_code}.")
 
 
-# --- TAB 2: LOG HISTORY ---
+# --- TAB 2: HISTORY & LOGS ---
 with tab2:
-    st.markdown("### Historical QC Logs")
     records = get_all_entries()
 
+    # Dashboard Metrics Banner
+    total_cases = len(records)
+    resolved_cases = sum(1 for r in records if r[8] == "Y")
+    open_cases = total_cases - resolved_cases
+
+    m1, m2, m3 = st.columns(3)
+    with m1:
+        st.markdown(f'<div class="metric-card"><div class="metric-value">{total_cases}</div><div class="metric-label">Total Cases</div></div>', unsafe_allow_html=True)
+    with m2:
+        st.markdown(f'<div class="metric-card"><div class="metric-value" style="color: #059669;">{resolved_cases}</div><div class="metric-label">Resolved</div></div>', unsafe_allow_html=True)
+    with m3:
+        st.markdown(f'<div class="metric-card"><div class="metric-value" style="color: #DC2626;">{open_cases}</div><div class="metric-label">Open</div></div>', unsafe_allow_html=True)
+
+    st.write("")
+
     if not records:
-        st.info("No records found in the database.")
+        st.info("No recorded logs in the database.")
     else:
         for rec in records:
             (
@@ -169,20 +289,35 @@ with tab2:
                 t_taken,
                 supp,
             ) = rec
-            with st.expander(f"Case #{rec_id} — {p_code} ({supp})"):
+
+            badge_html = (
+                '<span class="badge-resolved">Resolved</span>'
+                if res == "Y"
+                else '<span class="badge-open">Open</span>'
+            )
+
+            with st.expander(f"Case #{rec_id} — {p_code}"):
+                st.markdown(f"**Supplier:** {supp} | **Status:** {badge_html}", unsafe_allow_html=True)
+                st.write("")
+                
                 c1, c2 = st.columns([2, 1])
                 with c1:
-                    st.write(f"**Date Opened:** {d_open}")
-                    st.write(f"**Quantity:** {qty} | **Status:** {res}")
-                    st.write(f"**Description:** {p_desc}")
-                    st.write(f"**Issue:** {issue}")
-                    st.write(f"**Corrective Action:** {action}")
+                    st.markdown(f"**Date Opened:** {d_open}")
+                    st.markdown(f"**Quantity:** {qty} | **Time:** {t_taken}")
+                    if p_desc:
+                        st.markdown(f"**Description:** {p_desc}")
+                    if issue:
+                        st.markdown(f"**Issue:** {issue}")
+                    if action:
+                        st.markdown(f"**Action:** {action}")
                 with c2:
                     if photo:
-                        st.image(photo, width=150)
+                        st.image(photo, use_container_width=True)
 
-                if st.button(f"🗑️ Delete Entry #{rec_id}", key=f"del_{rec_id}"):
+                st.divider()
+                if st.button(f"🗑️ Delete Entry", key=f"del_{rec_id}", type="secondary"):
                     delete_entry(rec_id)
+                    st.toast(f"Deleted Case #{rec_id}", icon="🗑️")
                     st.rerun()
 
 
@@ -190,9 +325,7 @@ with tab2:
 def build_excel_report(month_year_str, records):
     wb = openpyxl.Workbook()
 
-    fill_header = PatternFill(
-        start_color="1F497D", end_color="1F497D", fill_type="solid"
-    )
+    fill_header = PatternFill(start_color="1F497D", end_color="1F497D", fill_type="solid")
     font_header = Font(name="Calibri", size=11, bold=True, color="FFFFFF")
     font_title = Font(name="Calibri", size=16, bold=True)
     border_grid = Border(
@@ -202,72 +335,35 @@ def build_excel_report(month_year_str, records):
         bottom=Side(style="thin", color="D9D9D9"),
     )
 
-    # Summary Tab
     ws_summary = wb.active
     ws_summary.title = "QC Presentation"
     ws_summary.views.sheetView[0].showGridLines = True
     ws_summary["A1"] = f"{month_year_str.upper()} QUALITY CONTROL — SUMMARY"
     ws_summary["A1"].font = font_title
 
-    # Register Tab
     ws_reg = wb.create_sheet(title=f"QC {month_year_str}")
     ws_reg.views.sheetView[0].showGridLines = True
     ws_reg["A1"] = f"QUALITY CONTROL REGISTER — {month_year_str.upper()}"
     ws_reg["A1"].font = font_title
 
     headers = [
-        "No.",
-        "Date Opened/Checked",
-        "Product Code",
-        "Quantity",
-        "Picture of Product",
-        "Product Description",
-        "Background / Issue Description",
-        "Corrective Action",
-        "Resolved (Y/N)",
-        "Date Completed",
-        "Time Taken",
-        "Supplier",
+        "No.", "Date Opened/Checked", "Product Code", "Quantity", 
+        "Picture of Product", "Product Description", "Background / Issue Description", 
+        "Corrective Action", "Resolved (Y/N)", "Date Completed", "Time Taken", "Supplier"
     ]
 
     for col_idx, header in enumerate(headers, 1):
         cell = ws_reg.cell(row=3, column=col_idx, value=header)
         cell.fill = fill_header
         cell.font = font_header
-        cell.alignment = Alignment(
-            horizontal="center", vertical="center", wrap_text=True
-        )
+        cell.alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
 
     for row_idx, rec in enumerate(records, 4):
-        (
-            rec_id,
-            d_open,
-            p_code,
-            qty,
-            photo,
-            p_desc,
-            issue,
-            action,
-            res,
-            d_comp,
-            t_taken,
-            supp,
-        ) = rec
+        (rec_id, d_open, p_code, qty, photo, p_desc, issue, action, res, d_comp, t_taken, supp) = rec
         ws_reg.row_dimensions[row_idx].height = 65 if photo else 20
 
         row_vals = [
-            rec_id,
-            d_open,
-            p_code,
-            qty,
-            "",
-            p_desc,
-            issue,
-            action,
-            res,
-            d_comp,
-            t_taken,
-            supp,
+            rec_id, d_open, p_code, qty, "", p_desc, issue, action, res, d_comp, t_taken, supp
         ]
 
         for col_idx, val in enumerate(row_vals, 1):
@@ -290,9 +386,7 @@ def build_excel_report(month_year_str, records):
     for col in ws_reg.columns:
         max_len = max(len(str(cell.value or "")) for cell in col)
         col_letter = get_column_letter(col[0].column)
-        ws_reg.column_dimensions[col_letter].width = min(
-            max(max_len + 3, 12), 40
-        )
+        ws_reg.column_dimensions[col_letter].width = min(max(max_len + 3, 12), 40)
 
     output = io.BytesIO()
     wb.save(output)
@@ -301,18 +395,21 @@ def build_excel_report(month_year_str, records):
 
 
 with tab3:
-    st.markdown("### Export Monthly Report")
-    month_select = st.text_input("Report Month/Year", value="August 2026")
+    st.subheader("Export Excel Workbook")
+    st.caption("Compile stored entries into formatted monthly reports.")
 
-    if st.button("Generate Excel File from Database"):
+    month_select = st.text_input("Report Month & Year", value="August 2026")
+
+    if st.button("📊 Compile Report File", type="primary", use_container_width=True):
         all_logs = get_all_entries()
         if not all_logs:
-            st.warning("No records stored in database to export.")
+            st.warning("No records stored in the database to export.")
         else:
             excel_data = build_excel_report(month_select, all_logs)
             st.download_button(
-                label="⬇️ Download Monthly QC Report (.xlsx)",
+                label="⬇️ Download .XLSX Report File",
                 data=excel_data,
                 file_name=f"Monthly_QC_Report_{month_select.replace(' ', '_')}.xlsx",
                 mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                use_container_width=True,
             )
