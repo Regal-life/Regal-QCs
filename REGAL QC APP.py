@@ -241,6 +241,10 @@ with tab1:
     # 2. ENTRY FORM
     scanned_val = st.session_state.get("scanned_product_code", "")
 
+    # CAMERA INPUT (OUTSIDE FORM TO PREVENT STATE RESET)
+    st.markdown("📷 **Take Product / Defect Photo**")
+    live_photo = st.camera_input("Capture product image", key="product_live_cam")
+
     with st.form("qc_entry_form", clear_on_submit=True):
         col1, col2 = st.columns(2)
         with col1:
@@ -276,9 +280,9 @@ with tab1:
         )
 
         st.divider()
-        st.markdown("📷 **Multi-Photo Inspection Attachment**")
+        st.markdown("📁 **Or Upload Additional Photos (Optional)**")
         uploaded_photos = st.file_uploader(
-            "Upload or capture defect photos",
+            "Attach extra images",
             type=["png", "jpg", "jpeg"],
             accept_multiple_files=True,
         )
@@ -292,13 +296,20 @@ with tab1:
                 st.error("Please enter a Product Code.")
             else:
                 encoded_photos = []
+                first_photo = None
+
+                # Capture photo from live camera component first
+                if live_photo:
+                    first_photo = live_photo.getvalue()
+                    encoded_photos.append(first_photo.hex())
+
+                # Append uploaded files
                 if uploaded_photos:
                     for p in uploaded_photos:
-                        encoded_photos.append(p.getvalue().hex())
-
-                first_photo = (
-                    uploaded_photos[0].getvalue() if uploaded_photos else None
-                )
+                        val_bytes = p.getvalue()
+                        if not first_photo:
+                            first_photo = val_bytes
+                        encoded_photos.append(val_bytes.hex())
 
                 entry = {
                     "date_opened": date_opened.strftime("%Y-%m-%d"),
