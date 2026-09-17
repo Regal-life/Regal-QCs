@@ -1,0 +1,17 @@
+{
+  "short_name": "Regal QC",
+  "name": "Regal Quality Manager",
+  "icons": [
+    {
+      "src": "favicon_512.png",
+      "type": "image/png",
+      "sizes": "512x512"
+    }
+  ],
+  "start_url": "/",
+  "display": "standalone",
+  "theme_color": "#8d95bb",
+  "background_color": "#fcfbfb",
+  "id": "KJMAKHADO",
+  "description": "Regal Quality Manager app"
+}
