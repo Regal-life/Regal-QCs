@@ -9,6 +9,8 @@ from openpyxl.drawing.image import Image as OpenPyxlImage
 from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
 from openpyxl.utils import get_column_letter
 from PIL import Image
+import plotly.express as px
+import plotly.graph_objects as go
 import streamlit as st
 
 # Optional Barcode Reader library
@@ -217,8 +219,8 @@ st.markdown(
     unsafe_allow_html=True,
 )
 
-tab1, tab2, tab3 = st.tabs(
-    ["➕ New Case", "📜 History Logs", "📊 Generate Report"]
+tab1, tab2, tab3, tab4 = st.tabs(
+    ["➕ New Case", "📜 History Logs", "📈 Analytics", "📊 Export Report"]
 )
 
 # --- TAB 1: NEW INCIDENT ---
@@ -241,7 +243,6 @@ with tab1:
     # 2. ENTRY FORM
     scanned_val = st.session_state.get("scanned_product_code", "")
 
-    # CAMERA INPUT (OUTSIDE FORM TO PREVENT STATE RESET)
     st.markdown("📷 **Take Product / Defect Photo**")
     live_photo = st.camera_input("Capture product image", key="product_live_cam")
 
@@ -298,12 +299,10 @@ with tab1:
                 encoded_photos = []
                 first_photo = None
 
-                # Capture photo from live camera component first
                 if live_photo:
                     first_photo = live_photo.getvalue()
                     encoded_photos.append(first_photo.hex())
 
-                # Append uploaded files
                 if uploaded_photos:
                     for p in uploaded_photos:
                         val_bytes = p.getvalue()
@@ -439,7 +438,69 @@ with tab2:
                         st.rerun()
 
 
-# --- TAB 3: EXCEL GENERATOR ENGINE ---
+# --- TAB 3: DATA & ANALYTICS DASHBOARD ---
+with tab3:
+    st.subheader("📊 Quality Analytics & Supplier Insights")
+    records = get_all_entries()
+
+    if not records:
+        st.info("No data available for analysis. Log a case to view analytics.")
+    else:
+        # Data aggregation
+        suppliers = [r[11] if r[11] else "Unassigned" for r in records]
+        statuses = ["Resolved" if r[8] == "Y" else "Open" for r in records]
+
+        supp_counts = {}
+        for s in suppliers:
+            supp_counts[s] = supp_counts.get(s, 0) + 1
+
+        # 1. Supplier Breakdown Chart
+        st.markdown("#### Cases by Supplier / Location")
+        fig_supp = px.bar(
+            x=list(supp_counts.keys()),
+            y=list(supp_counts.values()),
+            labels={"x": "Supplier / Location", "y": "Incident Count"},
+            color_discrete_sequence=["#1F497D"],
+        )
+        fig_supp.update_layout(margin=dict(l=20, r=20, t=20, b=20), height=300)
+        st.plotly_chart(fig_supp, use_container_width=True)
+
+        # 2. Resolution Rate Pie Chart
+        st.markdown("#### Resolution Status Overview")
+        status_counts = {
+            "Resolved": sum(1 for s in statuses if s == "Resolved"),
+            "Open": sum(1 for s in statuses if s == "Open"),
+        }
+        fig_pie = px.pie(
+            names=list(status_counts.keys()),
+            values=list(status_counts.values()),
+            color=list(status_counts.keys()),
+            color_discrete_map={"Resolved": "#059669", "Open": "#DC2626"},
+            hole=0.4,
+        )
+        fig_pie.update_layout(margin=dict(l=20, r=20, t=20, b=20), height=280)
+        st.plotly_chart(fig_pie, use_container_width=True)
+
+        # 3. Database Backup Snapshot
+        st.divider()
+        st.markdown("#### 💾 Database Snapshot & Backup")
+        st.caption(
+            "Download a complete SQLite database backup for record archival."
+        )
+
+        with open("qc_logs.db", "rb") as db_file:
+            db_bytes = db_file.read()
+
+        st.download_button(
+            label="⬇️ Download Database Backup (.db)",
+            data=db_bytes,
+            file_name=f"qc_logs_backup_{datetime.now().strftime('%Y%m%d')}.db",
+            mime="application/x-sqlite3",
+            use_container_width=True,
+        )
+
+
+# --- TAB 4: EXCEL GENERATOR ENGINE ---
 def build_excel_report(month_year_str, records):
     wb = openpyxl.Workbook()
 
@@ -552,7 +613,7 @@ def build_excel_report(month_year_str, records):
     return output
 
 
-with tab3:
+with tab4:
     st.subheader("Export Excel Workbook")
     st.caption("Compile stored entries into formatted monthly reports.")
 
