@@ -3,3 +3,4 @@ openpyxl
 Pillow
 pyzbar
 fpdf2
+plotly
